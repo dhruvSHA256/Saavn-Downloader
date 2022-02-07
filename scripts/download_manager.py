@@ -111,10 +111,14 @@ class Manager:
             try:
                 if is_playlist:
                     dec_url = self.get_dec_url(song["more_info"]["encrypted_media_url"])
-                    filename = self.format_filename(song.get("title"))
+                    filename = self.format_filename(
+                        song.get("title") + "_" + song.get("id")
+                    )
                 else:
                     dec_url = self.get_dec_url(song.get("encrypted_media_url"))
-                    filename = self.format_filename(song.get("song"))
+                    filename = self.format_filename(
+                        song.get("song") + "_" + song.get("id")
+                    )
                 song["dec_url"] = dec_url
             except Exception as e:
                 print("Download Error: {0}".format(e))
