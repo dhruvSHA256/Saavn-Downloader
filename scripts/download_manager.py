@@ -19,11 +19,15 @@ class Manager:
         self.des_cipher = self.setDecipher()
 
     def setDecipher(self):
-        return des(b"38346591", ECB, b"\0\0\0\0\0\0\0\0", pad=None, padmode=PAD_PKCS5)
+        return des(
+            b"38346591", ECB, b"\0\0\0\0\0\0\0\0", pad=None, padmode=PAD_PKCS5
+        )
 
     def get_dec_url(self, enc_url):
         enc_url = base64.b64decode(enc_url.strip())
-        dec_url = self.des_cipher.decrypt(enc_url, padmode=PAD_PKCS5).decode("utf-8")
+        dec_url = self.des_cipher.decrypt(enc_url, padmode=PAD_PKCS5).decode(
+            "utf-8"
+        )
         dec_url = dec_url.replace("_96.mp4", "_320.mp4")
         return dec_url
 
@@ -98,7 +102,9 @@ class Manager:
                 artist_name = ", ".join(
                     [
                         unidecode(artist["name"])
-                        for artist in song["more_info"]["artistMap"]["primary_artists"]
+                        for artist in song["more_info"]["artistMap"][
+                            "primary_artists"
+                        ]
                     ]
                 )
 
@@ -110,15 +116,17 @@ class Manager:
 
             try:
                 if is_playlist:
-                    dec_url = self.get_dec_url(song["more_info"]["encrypted_media_url"])
-                    filename = self.format_filename(
-                        song.get("title") + "_" + song.get("id")
+                    dec_url = self.get_dec_url(
+                        song["more_info"]["encrypted_media_url"]
                     )
+                    filename = self.format_filename(
+                        song.get("title")
+                    )  + "_" + song.get("id")
                 else:
                     dec_url = self.get_dec_url(song.get("encrypted_media_url"))
                     filename = self.format_filename(
-                        song.get("song") + "_" + song.get("id")
-                    )
+                        song.get("song")
+                    )  + "_" + song.get("id")
                 song["dec_url"] = dec_url
             except Exception as e:
                 print("Download Error: {0}".format(e))
@@ -131,28 +139,41 @@ class Manager:
                         playlist_name, artist_name, album_name, filename
                     )
                     if is_playlist
-                    else self.get_download_location(artist_name, album_name, filename)
+                    else self.get_download_location(
+                        artist_name, album_name, filename
+                    )
                 )
                 song["location"] = location
-                has_downloaded = self.start_download(filename, location, dec_url)
+                has_downloaded = self.start_download(
+                    filename, location, dec_url
+                )
                 assert os.access(os.path.dirname(location), os.W_OK) == True
                 if has_downloaded:
                     name = songs_json.get("title")
                     try:
-                        self.addtags(location, song, name, artist_name, is_playlist)
+                        self.addtags(
+                            location, song, name, artist_name, is_playlist
+                        )
                     except Exception as e:
-                        print("============== Error Adding Meta Data ==============")
+                        print(
+                            "============== Error Adding Meta Data =============="
+                        )
                         print("Error : {0}".format(e))
                     print("\n")
             except Exception as e:
                 print("Download Error : {0}".format(e))
 
         if is_playlist:
-            with open(playlist_name + ".json", "w") as jsonfile:
+            with open("json/" + playlist_name + ".json", "w") as jsonfile:
                 json.dump(songs_json, jsonfile, indent=4, sort_keys=True)
 
     def addtags(
-        self, filename, json_data, playlist_name, artist_name, is_playlist=False
+        self,
+        filename,
+        json_data,
+        playlist_name,
+        artist_name,
+        is_playlist=False,
     ):
         audio = MP4(filename)
         audio["\xa9ART"] = html.unescape(self.unicode(artist_name))
@@ -168,7 +189,9 @@ class Manager:
             audio["\xa9wrt"] = html.unescape(
                 self.unicode(json_data["more_info"]["music"])
             )
-            audio["cprt"] = html.unescape(self.unicode(json_data["more_info"]["label"]))
+            audio["cprt"] = html.unescape(
+                self.unicode(json_data["more_info"]["label"])
+            )
             audio["\xa9nam"] = html.unescape(self.unicode(json_data["title"]))
         else:
             audio["\xa9alb"] = html.unescape(self.unicode(json_data["album"]))
@@ -186,7 +209,8 @@ class Manager:
         cover = MP4Cover(
             fd.read(),
             getattr(
-                MP4Cover, "FORMAT_PNG" if cover_url.endswith("png") else "FORMAT_JPEG"
+                MP4Cover,
+                "FORMAT_PNG" if cover_url.endswith("png") else "FORMAT_JPEG",
             ),
         )
         fd.close()
