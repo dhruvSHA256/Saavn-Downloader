@@ -29,7 +29,10 @@ class Download:
                 email = input("Enter your email for jiosaavn: ").strip()
                 password = input("Enter your password for jiosaavn: ").strip()
             account = Account(
-                proxies=proxies, headers=headers, email=email, password=password
+                proxies=proxies,
+                headers=headers,
+                email=email,
+                password=password,
             )
             if args.p:
                 account.start_download_playlist()

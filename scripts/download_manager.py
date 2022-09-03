@@ -2,12 +2,14 @@ import base64
 import html
 import json
 import os
+import re
+import unicodedata
 import urllib.request
-from unidecode import unidecode
+
 from mutagen.mp4 import MP4, MP4Cover
 from pySmartDL import SmartDL
-import unicodedata
-import re
+from unidecode import unidecode
+
 from .helper import argManager
 from .pyDes import *
 
@@ -19,15 +21,11 @@ class Manager:
         self.des_cipher = self.setDecipher()
 
     def setDecipher(self):
-        return des(
-            b"38346591", ECB, b"\0\0\0\0\0\0\0\0", pad=None, padmode=PAD_PKCS5
-        )
+        return des(b"38346591", ECB, b"\0\0\0\0\0\0\0\0", pad=None, padmode=PAD_PKCS5)
 
     def get_dec_url(self, enc_url):
         enc_url = base64.b64decode(enc_url.strip())
-        dec_url = self.des_cipher.decrypt(enc_url, padmode=PAD_PKCS5).decode(
-            "utf-8"
-        )
+        dec_url = self.des_cipher.decrypt(enc_url, padmode=PAD_PKCS5).decode("utf-8")
         dec_url = dec_url.replace("_96.mp4", "_320.mp4")
         return dec_url
 
@@ -102,9 +100,7 @@ class Manager:
                 artist_name = ", ".join(
                     [
                         unidecode(artist["name"])
-                        for artist in song["more_info"]["artistMap"][
-                            "primary_artists"
-                        ]
+                        for artist in song["more_info"]["artistMap"]["primary_artists"]
                     ]
                 )
 
@@ -116,17 +112,15 @@ class Manager:
 
             try:
                 if is_playlist:
-                    dec_url = self.get_dec_url(
-                        song["more_info"]["encrypted_media_url"]
+                    dec_url = self.get_dec_url(song["more_info"]["encrypted_media_url"])
+                    filename = (
+                        self.format_filename(song.get("title")) + "_" + song.get("id")
                     )
-                    filename = self.format_filename(
-                        song.get("title")
-                    )  + "_" + song.get("id")
                 else:
                     dec_url = self.get_dec_url(song.get("encrypted_media_url"))
-                    filename = self.format_filename(
-                        song.get("song")
-                    )  + "_" + song.get("id")
+                    filename = (
+                        self.format_filename(song.get("song")) + "_" + song.get("id")
+                    )
                 song["dec_url"] = dec_url
             except Exception as e:
                 print("Download Error: {0}".format(e))
@@ -136,28 +130,25 @@ class Manager:
             try:
                 location = (
                     self.get_download_location(
-                        playlist_name, artist_name, album_name, filename
+                        playlist_name,
+                        artist_name,
+                        album_name,
                     )
                     if is_playlist
                     else self.get_download_location(
-                        artist_name, album_name, filename
+                        artist_name,
+                        album_name,
                     )
-                )
+                ) + filename
                 song["location"] = location
-                has_downloaded = self.start_download(
-                    filename, location, dec_url
-                )
+                has_downloaded = self.start_download(filename, location, dec_url)
                 assert os.access(os.path.dirname(location), os.W_OK) == True
                 if has_downloaded:
                     name = songs_json.get("title")
                     try:
-                        self.addtags(
-                            location, song, name, artist_name, is_playlist
-                        )
+                        self.addtags(location, song, name, artist_name, is_playlist)
                     except Exception as e:
-                        print(
-                            "============== Error Adding Meta Data =============="
-                        )
+                        print("============== Error Adding Meta Data ==============")
                         print("Error : {0}".format(e))
                     print("\n")
             except Exception as e:
@@ -189,9 +180,7 @@ class Manager:
             audio["\xa9wrt"] = html.unescape(
                 self.unicode(json_data["more_info"]["music"])
             )
-            audio["cprt"] = html.unescape(
-                self.unicode(json_data["more_info"]["label"])
-            )
+            audio["cprt"] = html.unescape(self.unicode(json_data["more_info"]["label"]))
             audio["\xa9nam"] = html.unescape(self.unicode(json_data["title"]))
         else:
             audio["\xa9alb"] = html.unescape(self.unicode(json_data["album"]))
