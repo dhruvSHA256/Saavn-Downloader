@@ -1,6 +1,5 @@
 import base64
 import html
-import json
 import os
 import re
 import unicodedata
@@ -10,8 +9,12 @@ from mutagen.mp4 import MP4, MP4Cover
 from pySmartDL import SmartDL
 from unidecode import unidecode
 
+import json
 from .helper import argManager
 from .pyDes import *
+
+
+from concurrent.futures import ThreadPoolExecutor
 
 
 class Manager:
@@ -35,6 +38,7 @@ class Manager:
         for c in "&#:/<>?*|":
             filename.replace(c, "-")
         filename = filename.replace(", ", "_")
+        filename = filename.replace("/", "-")
         filename = re.sub(r"[^\w\s]-", "", filename.lower())
         filename = re.sub(r"[-\s]+", "-", filename).strip("-_").strip(".")
         filename = unidecode(filename)
@@ -43,7 +47,7 @@ class Manager:
             .encode("ascii", "ignore")
             .decode("ascii")
         )
-        return filename
+        return filename.encode("utf-8").strip().decode("utf-8")
 
     def get_download_location(self, *args):
         if self.args.outFolder is None:
@@ -53,18 +57,17 @@ class Manager:
         for folder in args:
             folder = self.format_filename(folder)
             location = os.path.join(location, folder)
-        return location[:250] + ".m4a"
+        return location[:250]
 
     def start_download(self, filename, location, dec_url):
-        if len(filename) < 1 or filename == "":
-            print(f"Error Downloding {location}")
         if os.path.isfile(location):
             print("Downloaded {0}".format(filename))
             return False
+        if len(filename) < 1 or filename == "":
+            print(f"Error Downloading {location}")
         else:
             print("Downloading {0}".format(filename))
-            print(location)
-            obj = SmartDL(dec_url, location)
+            obj = SmartDL(dec_url, location, progress_bar=False)
             obj.start()
             return True
 
@@ -76,9 +79,7 @@ class Manager:
         is_playlist=False,
     ):
 
-        filename = None
         playlist_name = None
-        dec_url = None
         if is_playlist:
             playlist_name = songs_json.get("title")
             songslist = songs_json.get("list")
@@ -91,72 +92,98 @@ class Manager:
             print(f"[*] Downloading album {album_name}")
             pass
 
+        name = songs_json.get("title")
+
+        # make it multithreaded
         for song in songslist:
+            self.downloadSong(
+                song, name, playlist_name, album_name, artist_name, is_playlist
+            )
 
-            if song["id"] == "":
-                continue
+        # with ThreadPoolExecutor(max_workers=20) as exe:
+        #     for song in songslist:
+        #         exe.submit(
+        #             self.downloadSong,
+        #             song,
+        #             name,
+        #             playlist_name,
+        #             album_name,
+        #             artist_name,
+        #             is_playlist,
+        #         )
 
-            if is_playlist:
-                artist_name = ", ".join(
-                    [
-                        unidecode(artist["name"])
-                        for artist in song["more_info"]["artistMap"]["primary_artists"]
-                    ]
-                )
+        # saving playlist in a json file
+        if is_playlist:
+            with open(os.path.join("json/", f"{playlist_name}.json"), "w") as jsonfile:
+                json.dump(songs_json, jsonfile, indent=4, sort_keys=True)
 
-                album_name = (
-                    unidecode(song.get("more_info").get("album"))
-                    if song.get("more_info").get("album")
-                    else ""
-                )
-
-            try:
-                if is_playlist:
-                    dec_url = self.get_dec_url(song["more_info"]["encrypted_media_url"])
-                    filename = (
-                        self.format_filename(song.get("title")) + "_" + song.get("id")
-                    )
-                else:
-                    dec_url = self.get_dec_url(song.get("encrypted_media_url"))
-                    filename = (
-                        self.format_filename(song.get("song")) + "_" + song.get("id")
-                    )
-                song["dec_url"] = dec_url
-            except Exception as e:
-                print("Download Error: {0}".format(e))
-
-            assert filename != ""
-
-            try:
-                location = (
-                    self.get_download_location(
-                        playlist_name,
-                        artist_name,
-                        album_name,
-                    )
-                    if is_playlist
-                    else self.get_download_location(
-                        artist_name,
-                        album_name,
-                    )
-                ) + filename
-                song["location"] = location
-                has_downloaded = self.start_download(filename, location, dec_url)
-                assert os.access(os.path.dirname(location), os.W_OK) == True
-                if has_downloaded:
-                    name = songs_json.get("title")
-                    try:
-                        self.addtags(location, song, name, artist_name, is_playlist)
-                    except Exception as e:
-                        print("============== Error Adding Meta Data ==============")
-                        print("Error : {0}".format(e))
-                    print("\n")
-            except Exception as e:
-                print("Download Error : {0}".format(e))
+    def downloadSong(
+        self,
+        song,
+        name,
+        playlist_name,
+        album_name="songs",
+        artist_name="Non-Artist",
+        is_playlist=False,
+    ):
+        if song["id"] == "":
+            return
 
         if is_playlist:
-            with open("json/" + playlist_name + ".json", "w") as jsonfile:
-                json.dump(songs_json, jsonfile, indent=4, sort_keys=True)
+            artist_name = ", ".join(
+                [
+                    unidecode(artist["name"])
+                    for artist in song["more_info"]["artistMap"]["primary_artists"]
+                ]
+            )
+
+            album_name = (
+                unidecode(song.get("more_info").get("album"))
+                if song.get("more_info").get("album")
+                else ""
+            )
+
+        try:
+            if is_playlist:
+                dec_url = self.get_dec_url(song["more_info"]["encrypted_media_url"])
+                filename = (
+                    self.format_filename(song.get("title")) + "_" + song.get("id")
+                )
+            else:
+                dec_url = self.get_dec_url(song.get("encrypted_media_url"))
+                filename = self.format_filename(song.get("song")) + "_" + song.get("id")
+
+            song["dec_url"] = dec_url
+
+        except Exception as e:
+            print("Download Error: {0}".format(e))
+            return
+
+        try:
+            location = (
+                self.get_download_location(
+                    playlist_name,
+                    artist_name,
+                    album_name,
+                )
+                if is_playlist
+                else self.get_download_location(
+                    artist_name,
+                    album_name,
+                )
+            )
+            location = os.path.join(location, f"{filename}.m4a")
+            song["location"] = location
+            has_downloaded = self.start_download(filename, location, dec_url)
+            if has_downloaded:
+                try:
+                    self.addtags(location, song, name, artist_name, is_playlist)
+                except Exception as e:
+                    print("============== Error Adding Meta Data ==============")
+                    print("Error : {0}".format(e))
+
+        except Exception as e:
+            print("Download Error: {0}".format(e))
 
     def addtags(
         self,
